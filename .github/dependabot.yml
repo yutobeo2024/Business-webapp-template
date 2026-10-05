@@ -1,0 +1,35 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday, timezone: Asia/Ho_Chi_Minh }
+    open-pull-requests-limit: 5
+    groups:
+      # Gom bản vá và minor thành 1 PR. Major luôn tách riêng để review kỹ (dùng skill /upgrade-deps).
+      minor-and-patch:
+        update-types: [minor, patch]
+    labels: [dependencies]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday, timezone: Asia/Ho_Chi_Minh }
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Image nền trong infra/compose.*.yml ghim theo digest: bản vá đến qua PR, áp dụng ở lần phát hành kế tiếp.
+  # Bản lớn của nền tảng (PostgreSQL 17->18 cần dump/restore, Node chỉ dùng bản LTS chẵn, Redis/Caddy đổi hành vi)
+  # không tự đề xuất: nâng có kế hoạch theo /upgrade-deps và runbook. Bản vá/minor vẫn đến qua PR.
+  - package-ecosystem: docker-compose
+    directory: /infra
+    schedule: { interval: weekly, day: monday, timezone: Asia/Ho_Chi_Minh }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: docker
+    directory: /infra/docker
+    schedule: { interval: weekly, day: monday, timezone: Asia/Ho_Chi_Minh }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

@@ -1,0 +1,26 @@
+# Dịch vụ cho môi trường dev: PostgreSQL + Redis + Mailpit (SMTP giả, xem thư ở http://localhost:8025).
+# Chạy: pnpm dev:services
+name: app-dev
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app_dev
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - pg_dev:/var/lib/postgresql/data
+      - ./postgres/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6379:6379"]
+  mailpit:
+    image: axllent/mailpit:v1.31
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
+volumes:
+  pg_dev:

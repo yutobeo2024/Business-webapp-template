@@ -1,0 +1,7 @@
+# Bắt buộc LF để script shell chạy được trên server Linux khi commit từ Windows
+* text=auto eol=lf
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

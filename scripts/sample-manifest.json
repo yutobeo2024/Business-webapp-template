@@ -1,0 +1,36 @@
+{
+  "$comment": "Module MẪU (phiếu đề nghị mua hàng) để học cách viết module. `pnpm sample:remove` xóa các đường dẫn trong `delete`, cắt mọi khối `// sample:begin` ... `// sample:end` và dòng có `// sample` (markdown: `<!-- sample:begin -->` ... `<!-- sample:end -->`), sinh migration xóa bảng mẫu, rồi kiểm không còn tham chiếu (`residue`).",
+  "delete": [
+    "apps/api/src/modules/purchase-requests",
+    "apps/api/test/sample",
+    "apps/web/src/features/purchase-requests",
+    "apps/worker/src/exports/templates/purchase-request.ts",
+    "apps/worker/src/sample",
+    "packages/server/src/purchase-requests",
+    "packages/shared/src/purchase-request.ts",
+    "packages/shared/src/purchase-request.spec.ts",
+    "e2e/purchase-request.spec.ts",
+    "docs/specs/001-phieu-de-nghi-mua-hang.md"
+  ],
+  "scan": [
+    "apps",
+    "packages",
+    "e2e",
+    "infra",
+    "tests",
+    "docs",
+    ".claude",
+    ".github",
+    "CLAUDE.md",
+    "README.md"
+  ],
+  "residue": [
+    "purchase[-_ ]?requests?",
+    "PurchaseRequest",
+    "\\bPR_(PERMISSIONS|STATUSES)\\b",
+    "[\"'`]pr\\.[a-z]",
+    "prStatus",
+    "nhanvien@example\\.com",
+    "truongphong@example\\.com"
+  ]
+}

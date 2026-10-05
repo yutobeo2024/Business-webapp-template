@@ -1,0 +1,15 @@
+# Giám sát uptime từ BÊN NGOÀI. Chạy trên một VPS nhỏ KHÁC máy production, để khi production chết vẫn có cảnh báo.
+#   docker compose -f compose.monitoring.yml up -d
+#   Mở qua SSH tunnel (cổng chỉ nghe trên 127.0.0.1, không lộ ra internet, không truyền mật khẩu qua HTTP thường):
+#   ssh -L 3001:127.0.0.1:3001 <user>@<ip> rồi vào http://localhost:3001 tạo tài khoản ngay.
+# Thêm monitor HTTP(s) tới https://<DOMAIN>/api/health, chu kỳ 60 giây, kênh thông báo Telegram/email/webhook.
+# Lỗi ứng dụng (exception): dùng Sentry hoặc GlitchTip tự host (xem docs/runbooks/monitoring.md).
+name: monitoring
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    ports: ["127.0.0.1:3001:3001"]
+    volumes: [kuma_data:/app/data]
+volumes:
+  kuma_data:

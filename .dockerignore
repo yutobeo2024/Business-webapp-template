@@ -1,0 +1,18 @@
+# Kết quả turbo prune trên máy dev: lọt vào build context sẽ làm sai image
+out
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/playwright-report
+**/test-results
+.git
+.github
+.claude
+docs
+e2e
+# Secret ở mọi cấp thư mục (apps/api/.env...), không chỉ thư mục gốc.
+**/.env
+**/.env.*
+!**/.env.example
+tests

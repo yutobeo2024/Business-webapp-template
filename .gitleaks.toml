@@ -1,0 +1,12 @@
+# Cấu hình gitleaks (job "Quét bảo mật" trong .github/workflows/ci.yml). Giữ bộ luật mặc định, chỉ bỏ qua các giá trị
+# GIỮ CHỖ có sẵn trong mẫu của kit (không phải bí mật thật). Không bao giờ thêm bí mật thật vào danh sách này: lộ thì
+# xoay ngay (docs/runbooks/secrets-rotation.md).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Giá trị giữ chỗ trong tệp mẫu và mật khẩu chỉ dùng cho E2E trong CI"
+regexes = [
+  '''thay-bang-chuoi-ngau-nhien-32-ky-tu''',
+  '''e2e-mat-khau-chi-dung-trong-ci''',
+]

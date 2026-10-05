@@ -1,0 +1,27 @@
+node_modules
+dist
+.turbo
+out
+coverage
+playwright-report
+test-results
+*.log
+.DS_Store
+
+# Secret
+.env
+.env.*
+!.env.example
+infra/.env
+secrets/
+
+# Claude Code: cấu hình cá nhân, trạng thái của hook
+.claude/hooks/.state/
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Tệp tải lên khi chạy dev (STORAGE_DIR)
+.data/
+
+# Phiên đăng nhập E2E (auth.setup.ts)
+e2e/.auth/

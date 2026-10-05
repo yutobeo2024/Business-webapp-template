@@ -1,0 +1,60 @@
+name: Deploy (dùng lại)
+
+# Được gọi từ ci.yml và rollback.yml. Mỗi environment (staging, production) khai báo secret riêng:
+#   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY (private key), DEPLOY_KNOWN_HOSTS (dòng host key của máy chủ)
+# Production: bật "Required reviewers" trong Settings > Environments > production.
+on:
+  workflow_call:
+    inputs:
+      environment: { type: string, required: true }
+      tag: { type: string, required: true }
+      skip_migrate: { type: boolean, default: false }
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.tag }} -> ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - name: Kiểm tra tag (input rollback do người gõ tay, chống tiêm lệnh vào shell trên máy chủ)
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Tag không hợp lệ: chỉ cho phép chữ, số, dấu chấm, gạch dưới, gạch ngang"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cấu hình SSH (ghim host key, chống giả mạo máy chủ)
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Đồng bộ thư mục infra (không đụng .env và file trạng thái trên máy chủ)
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: >-
+          rsync -az --delete -e "ssh -i ~/.ssh/id_deploy"
+          --exclude .env --exclude '.deployed-tag' --exclude 'deploy-history.log'
+          --exclude '.deploy.lock' --exclude '.alert-state'
+          infra/ "$USER@$HOST:/opt/app/infra/"
+      - name: Chạy deploy.sh
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          TAG: ${{ inputs.tag }}
+          SKIP: ${{ inputs.skip_migrate && '--skip-migrate' || '' }}
+        # Gọi qua bash (deploy.sh cũng gọi script con qua bash): không phụ thuộc bit +x; CI vẫn kiểm bit +x.
+        # printf %q: tag luôn là một đối số, không bị shell trên máy chủ diễn giải.
+        run: ssh -i ~/.ssh/id_deploy "$USER@$HOST" "bash /opt/app/infra/deploy.sh $(printf %q "$TAG") $SKIP"

@@ -1,0 +1,7 @@
+dist
+coverage
+pnpm-lock.yaml
+packages/db/migrations
+apps/web/src/routeTree.gen.ts
+playwright-report
+test-results

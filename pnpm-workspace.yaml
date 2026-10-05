@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 10 chặn script cài đặt mặc định. Chỉ cho phép các gói cần build native đã được duyệt.
+onlyBuiltDependencies:
+  - "@swc/core"
+  - esbuild
+
+# Bản native tùy chọn của msgpackr (bullmq dùng). Không cần: thư viện tự dùng bản JS.
+ignoredBuiltDependencies:
+  - msgpackr-extract

@@ -1,0 +1,119 @@
+# Production trên một VPS. Chạy từ /opt/app: docker compose -f infra/compose.prod.yml ...
+# Secret nằm trong infra/.env (chmod 600, không commit). APP_TAG do infra/deploy.sh đặt.
+name: app
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+x-app: &app
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    NODE_ENV: production
+    STORAGE_DIR: /data/files
+  logging: *logging
+  networks: [internal]
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  caddy:
+    image: caddy:2.11.6-alpine@sha256:c776e0c6413b544d0459665e54ec7b8b2a15000c0cbee8b254da0067b1d184ff
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN:?Thiếu DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Thiếu ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: *logging
+    networks: [internal]
+    depends_on: [api, web]
+
+  web:
+    image: ${IMAGE_PREFIX:?Thiếu IMAGE_PREFIX}/web:${APP_TAG:?Thiếu APP_TAG}
+    restart: unless-stopped
+    logging: *logging
+    networks: [internal]
+
+  api:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Thiếu IMAGE_PREFIX}/api:${APP_TAG:?Thiếu APP_TAG}
+    # Tệp đính kèm/tệp xuất: thư mục trên host (ADR-0005), sao lưu bằng infra/backup-files.sh.
+    volumes: ["${FILES_DIR:-/opt/app-data/files}:/data/files"]
+    deploy:
+      resources:
+        limits: { memory: 768M }
+
+  worker:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Thiếu IMAGE_PREFIX}/worker:${APP_TAG:?Thiếu APP_TAG}
+    volumes: ["${FILES_DIR:-/opt/app-data/files}:/data/files"]
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        # Chromium (in PDF) cần thêm RAM; tăng EXPORT_CONCURRENCY thì tăng giới hạn này.
+        limits: { memory: 1G }
+
+  # Chạy một lần mỗi lần deploy: docker compose run --rm migrate
+  migrate:
+    <<: *app
+    image: ${IMAGE_PREFIX:?Thiếu IMAGE_PREFIX}/api:${APP_TAG:?Thiếu APP_TAG}
+    restart: "no"
+    profiles: [tools]
+    command: ["node", "node_modules/@app/db/dist/migrate.js"]
+
+  postgres:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Thiếu POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Thiếu POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Thiếu POSTGRES_DB}
+      TZ: UTC
+    volumes: [pg_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "${REDIS_PASSWORD:?Thiếu REDIS_PASSWORD}",
+        "--appendonly",
+        "yes",
+        "--maxmemory-policy",
+        "noeviction",
+      ]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pg_data:
+  redis_data:

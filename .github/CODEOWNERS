@@ -1,0 +1,6 @@
+# Thay @ten-to-chuc/... bằng nhóm thật. Bật "Require review from Code Owners" trong branch protection của main.
+*                 @ten-to-chuc/maintainers
+/infra/           @ten-to-chuc/maintainers
+/.github/         @ten-to-chuc/maintainers
+/.claude/         @ten-to-chuc/maintainers
+/packages/db/     @ten-to-chuc/maintainers

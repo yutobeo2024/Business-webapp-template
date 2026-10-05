@@ -1,0 +1,36 @@
+# Caddy bên trong container web: chỉ phục vụ file tĩnh của SPA. TLS do Caddy ngoài (infra/Caddyfile) xử lý.
+# Cổng 8080: container chạy user không phải root.
+{
+	admin off
+}
+
+:8080 {
+	root * /srv
+	encode zstd gzip
+
+	@sourcemaps path *.map
+	@missingAsset {
+		path /assets/*
+		not file
+	}
+	@assets path /assets/*
+	@notAssets not path /assets/*
+
+	# route: chạy ĐÚNG thứ tự viết. Ngoài route, Caddy tự xếp try_files trước respond, khi đó đường dẫn đã bị đổi
+	# thành /index.html và hai luật 404 dưới đây không bao giờ khớp với file không tồn tại.
+	route {
+		# Không phục vụ source map ra ngoài (lộ mã nguồn). Source map chỉ dùng để upload lên công cụ theo dõi lỗi.
+		respond @sourcemaps 404
+		# File /assets không tồn tại (trình duyệt còn giữ index.html của bản trước): trả 404, không trả index.html
+		# kèm cache vĩnh viễn (trình duyệt sẽ nhớ mãi một file JS có nội dung là HTML).
+		respond @missingAsset 404
+
+		# File trong /assets có hash trong tên: cache vĩnh viễn. Mọi thứ khác (index.html qua mọi đường dẫn SPA) phải
+		# kiểm lại mỗi lần, nếu không người dùng giữ index.html cũ trỏ tới JS đã bị xóa sau deploy và thấy trang trắng.
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header @notAssets Cache-Control "no-cache"
+
+		try_files {path} /index.html
+		file_server
+	}
+}
