@@ -17,16 +17,30 @@ load_env() {
   # shellcheck disable=SC1091
   source "$INFRA_DIR/.env"
   set +a
+  # Máy chủ dùng chung (đã có proxy giữ 80/443): Caddy của app chỉ nghe loopback (compose.shared.yml).
+  if [[ "${PROXY_MODE:-}" == shared && " ${COMPOSE[*]} " != *" $INFRA_DIR/compose.shared.yml "* ]]; then
+    COMPOSE+=(-f "$INFRA_DIR/compose.shared.yml")
+  fi
 }
 
 # Gửi cảnh báo tới ALERT_WEBHOOK_URL (JSON {"text": ...}). Không bao giờ làm script chính thất bại.
+send_webhook() {
+  [[ -n "${ALERT_WEBHOOK_URL:-}" ]] || return 0
+  local payload
+  payload=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  curl -fsS -m 10 -H 'Content-Type: application/json' -d "{\"text\":\"$payload\"}" "$ALERT_WEBHOOK_URL" >/dev/null 2>&1 || true
+}
+# Sự cố cần người xử lý.
 alert() {
   local msg="[${DOMAIN:-app}] $*"
   log "CẢNH BÁO: $msg"
-  [[ -n "${ALERT_WEBHOOK_URL:-}" ]] || return 0
-  local payload
-  payload=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g')
-  curl -fsS -m 10 -H 'Content-Type: application/json' -d "{\"text\":\"$payload\"}" "$ALERT_WEBHOOK_URL" >/dev/null 2>&1 || true
+  send_webhook "$msg"
+}
+# Tin bình thường (deploy xong, diễn tập OK): cùng kênh nhưng không gắn nhãn cảnh báo, để cảnh báo thật không bị lẫn.
+notify() {
+  local msg="[${DOMAIN:-app}] $*"
+  log "THÔNG BÁO: $msg"
+  send_webhook "$msg"
 }
 
 # Kiểm tra API qua Caddy trên chính máy chủ (--resolve tránh lỗi hairpin NAT).

@@ -1,0 +1,14 @@
+# Máy dùng chung có Caddy riêng của máy giữ 80/443: thêm site này rồi import vào Caddyfile ĐANG CHẠY của máy
+# (xem dòng ExecStart: `systemctl cat caddy`; có máy không dùng /etc/caddy/Caddyfile).
+#   cp caddy-site.caddy /etc/caddy/<app>.caddy   (đổi tên miền, cổng)
+#   thêm dòng: import /etc/caddy/<app>.caddy     vào Caddyfile đang chạy, không sửa site khác
+#   caddy validate --config <Caddyfile đang chạy> && caddy reload --config <Caddyfile đang chạy>
+# Caddyfile dùng biến {$...} thì nạp đúng EnvironmentFile của dịch vụ trước khi validate/reload, nếu không site khác
+# nhận giá trị rỗng. Không dùng `systemctl reload caddy` khi ExecReload trỏ khác ExecStart.
+app.tencongty.vn {
+	# Caddy của app đã gắn header bảo mật, nén, log; ở đây chỉ chuyển tiếp và giới hạn body như app.
+	request_body {
+		max_size 11MB
+	}
+	reverse_proxy 127.0.0.1:8095
+}

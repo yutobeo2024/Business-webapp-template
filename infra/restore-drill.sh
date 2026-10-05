@@ -30,4 +30,4 @@ LAST_AUDIT=$(q "select coalesce(max(created_at)::text, 'chưa có') from audit_l
 ELAPSED=$(( $(date +%s) - START ))
 date +%s > "$DIR/.last-drill"
 log "Diễn tập OK: $(basename "$LATEST"), ${ELAPSED}s, users=$USERS, audit mới nhất=$LAST_AUDIT"
-alert "Diễn tập khôi phục OK trong ${ELAPSED}s (users=$USERS)"
+notify "Diễn tập khôi phục OK trong ${ELAPSED}s (users=$USERS)"

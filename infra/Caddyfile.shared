@@ -1,0 +1,15 @@
+# Máy chủ dùng chung (PROXY_MODE=shared): proxy sẵn có của máy (Caddy, nginx...) giữ 80/443 và HTTPS, chuyển tiếp
+# tới Caddy của app chỉ nghe HTTP trên loopback (compose.shared.yml). Cùng xử lý với máy riêng (caddy-app.caddy).
+{
+	auto_https off
+	admin off
+	# Giữ X-Forwarded-For do proxy của máy gửi (đi qua docker-proxy, nguồn là mạng riêng), để API thấy IP thật của
+	# người dùng (TRUST_PROXY_HOPS=2). Không có dòng này, giới hạn đăng nhập theo IP sẽ đếm chung một IP.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	import /etc/caddy/app.caddy
+}

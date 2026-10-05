@@ -48,4 +48,4 @@ trap 'log "Khôi phục lỗi, khởi động lại api/worker"; "${COMPOSE[@]}"
 "${COMPOSE[@]}" start api worker
 wait_healthy 40 || die "Đã khôi phục nhưng API chưa healthy, kiểm tra log"
 log "Khôi phục xong từ $(basename "$FILE")"
-alert "Đã khôi phục DB từ $(basename "$FILE")"
+notify "Đã khôi phục DB từ $(basename "$FILE")"

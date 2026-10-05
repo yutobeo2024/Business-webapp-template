@@ -1,0 +1,12 @@
+# Máy chủ dùng chung (PROXY_MODE=shared trong infra/.env, lib.sh tự thêm tệp này vào lệnh compose).
+# Caddy của app không chiếm 80/443: chỉ nghe HTTP trên loopback, proxy sẵn có của máy chuyển tiếp tới đây
+# (mẫu cấu hình: infra/proxy-examples/). Postgres, Redis vẫn không mở cổng nào ra máy.
+services:
+  caddy:
+    ports: !override
+      - "127.0.0.1:${APP_LOCAL_PORT:-8095}:80"
+    volumes: !override
+      - ./Caddyfile.shared:/etc/caddy/Caddyfile:ro
+      - ./caddy-app.caddy:/etc/caddy/app.caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config

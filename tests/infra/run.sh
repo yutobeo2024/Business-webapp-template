@@ -9,7 +9,7 @@ set -Euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+trap '[[ -n "${KEEP_WORK:-}" ]] || rm -rf "$WORK"' EXIT
 FAILED=0
 PASSED=0
 
@@ -28,6 +28,23 @@ if docker compose version >/dev/null 2>&1; then
     ok "docker compose thật: config hợp lệ khi chưa có APP_TAG"
   else
     fail "docker compose thật: config hợp lệ khi chưa có APP_TAG"
+  fi
+  # Máy chủ dùng chung: Caddy của app chỉ mở cổng loopback, không chiếm 80/443, dùng Caddyfile.shared.
+  shared_cfg="$(printf 'PROXY_MODE=shared\nAPP_LOCAL_PORT=8095\n' >>"$WORK/real/infra/.env"
+    env -u APP_TAG bash -c 'source "$1/lib.sh"; load_env; "${COMPOSE[@]}" config' _ "$WORK/real/infra" 2>&1)"
+  check "docker compose thật, dùng chung: Caddy chỉ nghe 127.0.0.1:8095" \
+    'grep -q "host_ip: 127.0.0.1" <<<"$shared_cfg" && grep -q "published: \"8095\"" <<<"$shared_cfg" && ! grep -qE "published: \"(80|443)\"" <<<"$shared_cfg"'
+  check "docker compose thật, dùng chung: Caddy dùng Caddyfile.shared" 'grep -q "Caddyfile.shared" <<<"$shared_cfg"'
+  # Cấu hình Caddy hợp lệ ở cả hai chế độ (chỉ khi có docker daemon thật).
+  if docker info >/dev/null 2>&1; then
+    for f in Caddyfile Caddyfile.shared; do
+      img="$(awk '/^  caddy:/{c=1} c && /image:/{print $2; exit}' "$ROOT/infra/compose.prod.yml")"
+      check "Caddy validate: $f" \
+        'MSYS_NO_PATHCONV=1 docker run --rm -e DOMAIN=app.example.vn -e ACME_EMAIL=a@example.vn \
+          -v "$(cd "$ROOT/infra" && pwd -W 2>/dev/null || pwd)/$f:/etc/caddy/Caddyfile:ro" \
+          -v "$(cd "$ROOT/infra" && pwd -W 2>/dev/null || pwd)/caddy-app.caddy:/etc/caddy/app.caddy:ro" \
+          "$img" caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1'
+    done
   fi
 fi
 
@@ -52,6 +69,12 @@ if [[ "${1:-}" == "compose" ]]; then
 fi
 case "${1:-}" in
   inspect) echo "running healthy" ;;
+  # Liệt kê image như docker thật: chỉ những image khớp --filter reference=<tiền tố>/*.
+  images)
+    ref=""
+    for a in "$@"; do [[ "$a" == reference=* ]] && ref="${a#reference=}"; done
+    printf '%s\n' ${FAKE_IMAGES:-} | while read -r img; do [[ -z "$ref" || "$img" == ${ref%\*}* ]] && echo "$img"; done
+    ;;
 esac
 exit 0
 SH
@@ -110,6 +133,8 @@ up_line=$(line_of "up -d --wait .*postgres redis")
 dump_line=$(line_of "pg_dump")
 check "deploy lần đầu: up postgres redis trước pg_dump" '[[ -n "$up_line" && -n "$dump_line" && $up_line -lt $dump_line ]]'
 check "deploy lần đầu: ghi .deployed-tag" '[[ "$(cat "$CASE/infra/.deployed-tag" 2>/dev/null)" == v1.0.0 ]]'
+check "deploy thành công: báo THÔNG BÁO, không gắn nhãn CẢNH BÁO" \
+  'grep -q "THÔNG BÁO: .*Đã deploy v1.0.0" "$CASE/out.log" && ! grep -q "CẢNH BÁO: .*Đã deploy" "$CASE/out.log"'
 
 # 3. Tag độc hại bị từ chối trước mọi lệnh docker.
 fresh evil
@@ -129,6 +154,16 @@ check "deploy: pull và up dùng tag MỚI" '[[ "$pull_line" == APP_TAG=v1.1.0* 
 check "deploy lỗi health: thoát mã khác 0" '[[ $code -ne 0 ]]'
 check "deploy lỗi health: lệnh up cuối dùng tag cũ" '[[ "$last_up" == APP_TAG=v1.0.0* ]]'
 check "deploy lỗi health: .deployed-tag giữ tag cũ" '[[ "$(cat "$CASE/infra/.deployed-tag")" == v1.0.0 ]]'
+
+# 4b. Dọn image sau deploy: chỉ image cũ của CHÍNH app; giữ tag mới và tag trước; không đụng image dự án khác.
+fresh prune
+echo v1.1.0 >"$CASE/infra/.deployed-tag"
+FAKE_IMAGES="ghcr.io/x/y/api:v1.0.0 ghcr.io/x/y/api:v1.1.0 ghcr.io/x/y/api:v1.2.0 ghcr.io/x/y/web:v1.0.0 ghcr.io/khac/app:old postgres:17-alpine" \
+  run bash "$CASE/infra/deploy.sh" v1.2.0
+check "deploy: không dùng docker image prune (xóa image của mọi dự án)" '! grep -q "image prune" "$CALLS"'
+check "deploy: xóa image cũ của app" 'grep -q "docker rmi .*ghcr.io/x/y/api:v1.0.0" "$CALLS" && grep -q "docker rmi .*ghcr.io/x/y/web:v1.0.0" "$CALLS"'
+check "deploy: giữ tag mới, tag trước và image dự án khác" \
+  '! grep "docker rmi" "$CALLS" | sed "s/^APP_TAG=[^ ]* //" | grep -qE "v1\.1\.0|v1\.2\.0|ghcr.io/khac|postgres"'
 
 # 5. alert-check (cron 10 phút) không báo nhầm container chết vì thiếu APP_TAG.
 fresh alert
@@ -205,6 +240,16 @@ check "alert-check cảnh báo token Zalo không làm mới được" 'grep -q "
 : >"$CASE/infra/.alert-state"
 FAKE_FAILED_DELIVERIES=3 FAKE_ZALO_AGE_H=5 run bash "$CASE/infra/alert-check.sh"
 check "alert-check im lặng khi thông báo ổn" '! grep -q "CẢNH BÁO" "$CASE/out.log"'
+
+# 11. server-setup.sh: máy dùng chung không đụng hệ thống/dịch vụ khác; máy riêng vẫn làm đủ bước.
+shared_plan="$(bash "$ROOT/infra/server-setup.sh" --shared --dry-run "ssh-ed25519 AAAA ci" 2>&1)"
+full_plan="$(bash "$ROOT/infra/server-setup.sh" --dry-run "ssh-ed25519 AAAA ci" 2>&1)"
+check "server-setup --shared: chỉ tạo phần của app" \
+  'grep -q "User deploy" <<<"$shared_plan" && grep -q "cron" <<<"$shared_plan"'
+check "server-setup --shared: không upgrade, không khởi động lại Docker, không đụng SSH/tường lửa/swap" \
+  '! grep -qiE "Cập nhật hệ thống|khởi động lại Docker|Siết SSH|Tường lửa|Swap" <<<"$shared_plan"'
+check "server-setup máy riêng: vẫn đủ các bước siết máy" \
+  'grep -q "Tường lửa" <<<"$full_plan" && grep -q "Siết SSH" <<<"$full_plan" && grep -q "Docker Engine" <<<"$full_plan"'
 
 printf '\ntests/infra: %d đúng, %d sai\n' "$PASSED" "$FAILED"
 [[ $FAILED -eq 0 ]]
